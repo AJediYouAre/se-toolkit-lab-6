@@ -205,6 +205,10 @@ Where:
 
 ## Troubleshooting
 
+Cases:
+
+- [Service is running but a request fails](#service-is-running-but-a-request-fails)
+
 ### Service is running but a request fails
 
 Verify both:
