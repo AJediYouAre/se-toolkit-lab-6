@@ -285,6 +285,28 @@ The file must be non-empty.
     }
     ```
 
+12. To check that you can access the deployed `Qwen` API from your local machine:
+  
+    1. Open a new `VS Code Terminal`.
+    2. To query the `Qwen` API,
+
+       [run in the `VS Code Terminal`](./vs-code.md#run-a-command-in-the-vs-code-terminal):
+
+       ```terminal
+       curl -s http://<your-vm-ip-address>:<qwen-api-port>/v1/chat/completions \
+         -H "Content-Type: application/json" \
+         -H "Authorization: Bearer <qwen-api-key>" \
+         -d '{"model":"qwen3-coder-plus","messages":[{"role":"user","content":"What is 2+2?"}]}' \
+         | jq .
+       ```
+
+       Replace
+       - `<your-vm-ip-address>`
+       - `<qwen-api-port>`
+       - `<qwen-api-key>`
+
+<!-- TODO create own sections for querying the API -->
+
 ## Open a chat with `Qwen Code`
 
 <!-- no toc -->
