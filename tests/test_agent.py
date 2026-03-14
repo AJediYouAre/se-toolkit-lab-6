@@ -96,14 +96,14 @@ def test_documentation_agent_uses_read_file():
     assert len(answer) > 0, "Expected non-empty answer"
 
 
-def test_documentation_agent_uses_list_files():
+def test_system_agent_uses_read_file_for_framework():
     """
-    Test that the agent uses list_files tool for directory exploration questions.
-    
-    Question: "What files are in the wiki?"
-    Expected: list_files in tool_calls
+    Test that the agent uses read_file tool for source code questions.
+
+    Question: "What framework does the backend use?"
+    Expected: read_file in tool_calls, FastAPI in answer
     """
-    question = "What files are in the wiki?"
+    question = "What Python web framework does the backend use?"
 
     returncode, stdout, stderr = run_agent(question)
 
@@ -119,12 +119,53 @@ def test_documentation_agent_uses_list_files():
     except json.JSONDecodeError as e:
         raise AssertionError(f"Invalid JSON output: {e}\nOutput: {stdout}")
 
-    # Verify tool_calls contains list_files
+    # Verify tool_calls contains read_file
     tool_calls = response.get("tool_calls", [])
     assert len(tool_calls) > 0, "Expected tool_calls to be non-empty"
 
     tool_names = [call.get("tool") for call in tool_calls]
-    assert "list_files" in tool_names, f"Expected 'list_files' in tool_calls, got: {tool_names}"
+    assert "read_file" in tool_names, f"Expected 'read_file' in tool_calls, got: {tool_names}"
+
+    # Verify answer mentions FastAPI
+    answer = response.get("answer", "").lower()
+    assert "fastapi" in answer, f"Expected 'FastAPI' in answer, got: {answer}"
+
+
+def test_system_agent_uses_query_api():
+    """
+    Test that the agent uses query_api tool for data questions.
+
+    Question: "How many items are in the database?"
+    Expected: query_api in tool_calls
+    """
+    question = "How many items are currently stored in the database?"
+
+    returncode, stdout, stderr = run_agent(question)
+
+    print(f"stderr: {stderr}")
+    print(f"stdout: {stdout}")
+
+    # Check exit code
+    assert returncode == 0, f"Agent exited with code {returncode}: {stderr}"
+
+    # Parse JSON
+    try:
+        response = json.loads(stdout)
+    except json.JSONDecodeError as e:
+        raise AssertionError(f"Invalid JSON output: {e}\nOutput: {stdout}")
+
+    # Verify tool_calls contains query_api
+    tool_calls = response.get("tool_calls", [])
+    assert len(tool_calls) > 0, "Expected tool_calls to be non-empty"
+
+    tool_names = [call.get("tool") for call in tool_calls]
+    assert "query_api" in tool_names, f"Expected 'query_api' in tool_calls, got: {tool_names}"
+
+    # Verify answer contains a number
+    answer = response.get("answer", "")
+    import re
+    numbers = re.findall(r'\d+', answer)
+    assert len(numbers) > 0, f"Expected a number in answer, got: {answer}"
 
 
 if __name__ == "__main__":
@@ -138,6 +179,14 @@ if __name__ == "__main__":
 
     print("=== Test 3: list_files tool usage ===")
     test_documentation_agent_uses_list_files()
+    print("PASSED\n")
+
+    print("=== Test 4: read_file for framework question ===")
+    test_system_agent_uses_read_file_for_framework()
+    print("PASSED\n")
+
+    print("=== Test 5: query_api for data question ===")
+    test_system_agent_uses_query_api()
     print("PASSED\n")
 
     print("All tests passed!")
