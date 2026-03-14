@@ -142,13 +142,13 @@ def get_tool_definitions() -> list[dict]:
             "type": "function",
             "function": {
                 "name": "read_file",
-                "description": "Read the contents of a file from the project repository. Use this to read documentation files in the wiki/ directory.",
+                "description": "Read the contents of a file from the project repository. Use this to read documentation files in the wiki/ directory or source code files in backend/.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "path": {
                             "type": "string",
-                            "description": "Relative path from project root (e.g., 'wiki/git-workflow.md')"
+                            "description": "Relative path from project root (e.g., 'wiki/git-workflow.md' or 'backend/app/main.py')"
                         }
                     },
                     "required": ["path"]
@@ -165,14 +165,100 @@ def get_tool_definitions() -> list[dict]:
                     "properties": {
                         "path": {
                             "type": "string",
-                            "description": "Relative directory path from project root (e.g., 'wiki')"
+                            "description": "Relative directory path from project root (e.g., 'wiki' or 'backend/app/routers')"
                         }
                     },
                     "required": ["path"]
                 }
             }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "query_api",
+                "description": "Call the backend API to query data, check status codes, or discover errors. Use this for questions about the running system (database contents, HTTP status codes, API errors).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "method": {
+                            "type": "string",
+                            "description": "HTTP method (GET, POST, PUT, PATCH, DELETE)",
+                            "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"]
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "API path (e.g., '/items/', '/analytics/top-learners', '/analytics/completion-rate')"
+                        },
+                        "body": {
+                            "type": "string",
+                            "description": "Optional JSON request body for POST/PUT/PATCH requests"
+                        }
+                    },
+                    "required": ["method", "path"]
+                }
+            }
         }
     ]
+
+
+def query_api(method: str, path: str, body: str | None = None) -> str:
+    """
+    Call the backend API with authentication.
+    
+    Args:
+        method: HTTP method (GET, POST, PUT, PATCH, DELETE)
+        path: API path (e.g., '/items/', '/analytics/top-learners')
+        body: Optional JSON request body for POST/PUT/PATCH
+        
+    Returns:
+        JSON string with status_code and body, or error message
+    """
+    import os
+    
+    # Get configuration from environment
+    api_key = os.getenv("LMS_API_KEY")
+    base_url = os.getenv("AGENT_API_BASE_URL", "http://localhost:42002")
+    
+    if not api_key:
+        return "Error: LMS_API_KEY not set in environment"
+    
+    url = f"{base_url}{path}"
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    
+    print(f"  Calling {method} {url}...", file=sys.stderr)
+    
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            if method == "GET":
+                response = client.get(url, headers=headers)
+            elif method == "POST":
+                response = client.post(url, headers=headers, content=body or "{}")
+            elif method == "PUT":
+                response = client.put(url, headers=headers, content=body or "{}")
+            elif method == "PATCH":
+                response = client.patch(url, headers=headers, content=body or "{}")
+            elif method == "DELETE":
+                response = client.delete(url, headers=headers)
+            else:
+                return f"Error: Unknown method: {method}"
+            
+            result = {
+                "status_code": response.status_code,
+                "body": response.text,
+            }
+            
+            return json.dumps(result)
+            
+    except httpx.TimeoutException:
+        return f"Error: API request timed out (30s)"
+    except httpx.ConnectError as e:
+        return f"Error: Cannot connect to API at {url}: {e}"
+    except httpx.RequestError as e:
+        return f"Error: Request failed: {e}"
 
 
 def execute_tool_call(tool_name: str, tool_args: dict, project_root: Path) -> str:
@@ -196,6 +282,13 @@ def execute_tool_call(tool_name: str, tool_args: dict, project_root: Path) -> st
         path = tool_args.get("path", "")
         print(f"  Executing list_files('{path}')...", file=sys.stderr)
         return list_files(path, project_root)
+
+    elif tool_name == "query_api":
+        method = tool_args.get("method", "GET")
+        path = tool_args.get("path", "")
+        body = tool_args.get("body")
+        print(f"  Executing query_api({method} {path})...", file=sys.stderr)
+        return query_api(method, path, body)
 
     else:
         return f"Error: Unknown tool: {tool_name}"
@@ -306,28 +399,33 @@ def run_agentic_loop(
     Returns:
         Tuple of (answer, source, tool_calls_list)
     """
-    # System prompt for documentation assistant
-    system_prompt = """You are a documentation assistant for a software engineering project.
-You have access to two tools:
+    # System prompt for system agent
+    system_prompt = """You are a system assistant for a software engineering project.
+You have access to three tools:
 - list_files: List files and directories at a given path
 - read_file: Read the contents of a file
+- query_api: Call the backend API to query data or check status codes
 
 IMPORTANT: You must use tools to answer questions. Do NOT answer from your own knowledge.
-Always follow this process:
-1. First use list_files to explore the wiki/ directory to find relevant files
-2. Use read_file to read the contents of relevant files
-3. Extract the answer from the file contents you read
-4. Include a source reference in format: wiki/filename.md#section-anchor
+
+Choose the right tool based on the question type:
+1. For wiki documentation questions (e.g., "according to the wiki", "how to SSH") → use list_files and read_file on wiki/ files
+2. For source code questions (e.g., "what framework", "read the source") → use read_file on backend/ files
+3. For running system questions (e.g., "how many items", "what status code", "query the API") → use query_api
+4. For bug diagnosis (e.g., "what error", "find the bug") → use query_api to reproduce the error, then read_file to examine the source code
 
 Rules:
-- NEVER answer from your pre-trained knowledge - only use information from files you read
-- Always start by exploring the directory structure with list_files
-- Only answer after you have read relevant files with read_file
-- If you cannot find the answer in the wiki after exploring, say so honestly
+- NEVER answer from your pre-trained knowledge - only use information from tools
+- For wiki questions: explore with list_files, then read with read_file
+- For source code questions: directly read relevant backend/ files
+- For data questions: use query_api with appropriate endpoint
+- For bug diagnosis: first query_api to see the error, then read_file to find the buggy code
+- Include source references when reading files (e.g., wiki/filename.md or backend/path/file.py)
 
-When providing your final answer, include:
-- The answer text based on what you read from files
-- The source as a reference in format: wiki/filename.md#section-anchor"""
+When providing your final answer:
+- Base it on what you read from files or API responses
+- Include source references for file-based answers
+- For API data questions, report the actual values returned"""
 
     # Initialize messages
     messages = [
