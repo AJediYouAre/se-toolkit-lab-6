@@ -70,54 +70,54 @@ def validate_path(relative_path: str, project_root: Path) -> Path:
     return full_path
 
 
-def tool_read_file(path: str, project_root: Path) -> str:
+def read_file(path: str, project_root: Path) -> str:
     """
     Read a file from the project repository.
-    
+
     Args:
         path: Relative path from project root
         project_root: Project root directory
-        
+
     Returns:
         File contents as string, or error message
     """
     try:
         safe_path = validate_path(path, project_root)
-        
+
         if not safe_path.exists():
             return f"Error: File not found: {path}"
-        
+
         if not safe_path.is_file():
             return f"Error: Not a file: {path}"
-        
+
         return safe_path.read_text(encoding="utf-8")
-        
+
     except ValueError as e:
         return f"Error: {e}"
     except Exception as e:
         return f"Error reading file: {e}"
 
 
-def tool_list_files(path: str, project_root: Path) -> str:
+def list_files(path: str, project_root: Path) -> str:
     """
     List files and directories at a given path.
-    
+
     Args:
         path: Relative directory path from project root
         project_root: Project root directory
-        
+
     Returns:
         Newline-separated listing of entries, or error message
     """
     try:
         safe_path = validate_path(path, project_root)
-        
+
         if not safe_path.exists():
             return f"Error: Directory not found: {path}"
-        
+
         if not safe_path.is_dir():
             return f"Error: Not a directory: {path}"
-        
+
         entries = []
         for entry in safe_path.iterdir():
             # Skip hidden files/directories
@@ -126,9 +126,9 @@ def tool_list_files(path: str, project_root: Path) -> str:
             # Add directory indicator
             suffix = "/" if entry.is_dir() else ""
             entries.append(f"{entry.name}{suffix}")
-        
+
         return "\n".join(sorted(entries))
-        
+
     except ValueError as e:
         return f"Error: {e}"
     except Exception as e:
@@ -178,25 +178,25 @@ def get_tool_definitions() -> list[dict]:
 def execute_tool_call(tool_name: str, tool_args: dict, project_root: Path) -> str:
     """
     Execute a tool call and return the result.
-    
+
     Args:
         tool_name: Name of the tool to execute
         tool_args: Arguments for the tool
         project_root: Project root directory
-        
+
     Returns:
         Tool result as string
     """
     if tool_name == "read_file":
         path = tool_args.get("path", "")
         print(f"  Executing read_file('{path}')...", file=sys.stderr)
-        return tool_read_file(path, project_root)
-    
+        return read_file(path, project_root)
+
     elif tool_name == "list_files":
         path = tool_args.get("path", "")
         print(f"  Executing list_files('{path}')...", file=sys.stderr)
-        return tool_list_files(path, project_root)
-    
+        return list_files(path, project_root)
+
     else:
         return f"Error: Unknown tool: {tool_name}"
 
@@ -239,8 +239,8 @@ def call_llm_with_tools(
     print(f"Calling LLM at {url}...", file=sys.stderr)
 
     # Retry logic for rate limits
-    max_retries = 3
-    retry_delay = 10  # seconds
+    max_retries = 5
+    retry_delay = 15  # seconds
 
     for attempt in range(max_retries):
         try:

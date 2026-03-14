@@ -75,7 +75,7 @@ Reads contents of a file from the project repository.
 
 **Example:**
 ```python
-tool_read_file("wiki/git-workflow.md", project_root)
+read_file("wiki/git-workflow.md", project_root)
 # Returns: "# Git Workflow\n\n## Resolving Merge Conflicts\n..."
 ```
 
@@ -96,7 +96,7 @@ Lists files and directories at a given path.
 
 **Example:**
 ```python
-tool_list_files("wiki", project_root)
+list_files("wiki", project_root)
 # Returns: "git-workflow.md\nllm.md\nqwen.md\n..."
 ```
 
